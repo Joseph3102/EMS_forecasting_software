@@ -3,7 +3,7 @@ import pandas as pd
 from prophet import Prophet
 import matplotlib.pyplot as plt
 
-st.title("EMS Call Forecasting App")
+st.title("NextCall Analytics")
 
 uploaded_file = st.file_uploader("Upload a CSV with a column containing date/time of EMS calls", type='csv')
 
@@ -34,7 +34,7 @@ if uploaded_file:
         df['call_time'] = pd.to_datetime(df[found], errors='coerce')  # convert to datetime
         df = df.dropna(subset=[found])  # drop any invalid timestamps
 
-        daily_calls = df.groupby(df['call_time'].dt.date).size().reset_index(name='y')
+        daily_calls = df.groupby(df['call_time'].dt.date).size().reset_index()
         daily_calls.columns = ['ds', 'y']
         
         st.subheader("Daily EMS Calls")
@@ -43,10 +43,10 @@ if uploaded_file:
         model = Prophet()
         model.fit(daily_calls)
 
-        future = model.make_future_dataframe(periods=120)
+        future = model.make_future_dataframe(periods=30)
         forecast = model.predict(future)
 
-        st.subheader("Forecasted EMS Calls (Next 120 Days)")
+        st.subheader("Forecasted EMS Calls (Next 30 Days)")
         fig1 = model.plot(forecast)
         st.pyplot(fig1)
 
@@ -58,7 +58,7 @@ if uploaded_file:
         df = df.dropna(subset=[found2])
         df['facility'] = df[found2].astype(str).str.strip()
 
-        st.subheader("Likelihood of Calls by Facility (Next 120 Days)")
+        st.subheader("Likelihood of Calls by Facility (Next 30 Days)")
 
     # Step 1: Count daily calls by facility
         facility_daily = df.groupby([df['call_time'].dt.date, 'facility']).size().reset_index(name='y')
