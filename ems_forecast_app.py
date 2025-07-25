@@ -30,6 +30,9 @@ if uploaded_file:
 
     if not found:
         st.error("Could not find a valid date column. Please rename your date column to 'call_time'.")
+        
+        st.video(r"C:\Users\Joseph\Desktop\Projects\EMS-ForecastingModel\videos\CSV compatability with NextCall Analytics - Made with Clipchamp.mp4")
+
     else:
         df['call_time'] = pd.to_datetime(df[found], errors='coerce')  # convert to datetime
         df = df.dropna(subset=[found])  # drop any invalid timestamps
@@ -53,6 +56,9 @@ if uploaded_file:
     
     if not found2:
         st.warning("Could not find a valid facility/location column. Some features like facility call prediction will be skipped.")
+        
+        if found:
+            st.video("C:/Users/Joseph/Desktop/Projects/EMS-ForecastingModel/videos/CSV compatability with NextCall Analytics - Made with Clipchamp.mp4")
     else:
         # Clean the location data
         df = df.dropna(subset=[found2])
