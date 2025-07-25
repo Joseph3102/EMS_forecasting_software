@@ -49,9 +49,22 @@ if uploaded_file:
         future = model.make_future_dataframe(periods=30)
         forecast = model.predict(future)
 
-        st.subheader("Forecasted EMS Calls (Next 30 Days)")
-        fig1 = model.plot(forecast)
-        st.pyplot(fig1)
+       # Filter only the forecasted future dates
+        # Make sure max date is in datetime format
+        cutoff_date = pd.to_datetime(daily_calls['ds'].max())
+        future_only = forecast[forecast['ds'] > cutoff_date]
+
+        # Plot only the next 30 days
+        plt.figure(figsize=(10, 6))
+        plt.plot(future_only['ds'], future_only['yhat'], label='Forecast')
+        plt.fill_between(future_only['ds'], future_only['yhat_lower'], future_only['yhat_upper'], alpha=0.3)
+        plt.title("Forecasted EMS Calls (Next 30 Days)")
+        plt.xlabel("Date")
+        plt.ylabel("Predicted Calls")
+        plt.legend()
+        st.pyplot(plt)
+
+
 
     
     if not found2:
