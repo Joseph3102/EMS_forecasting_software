@@ -63,6 +63,39 @@ if uploaded_file:
         plt.ylabel("Predicted Calls")
         plt.legend()
         st.pyplot(plt)
+        
+        # Displays growth rate
+        start = future_only.iloc[0]['yhat']
+        end = future_only.iloc[-1]['yhat']
+        growth_rate = ((end - start) / start) * 100
+
+        trend = "increase" if growth_rate > 0 else "decrease"
+        st.write(f"Call volume is expected to {trend} by **{abs(growth_rate):.2f}%** over the next 30 days.")
+        
+        avg_calls = future_only['yhat'].mean()
+        st.write(f"Estimated Average Call Volume: {avg_calls}")
+        
+        # Find the maximum predicted call volume
+        max_volume = future_only['yhat'].max()
+
+        # Define a threshold (e.g., within 10% of the peak)
+        threshold = max_volume * 0.9
+
+        # Filter days within that threshold
+        peak_days_range = future_only[future_only['yhat'] >= threshold]
+
+        # Format the date range
+        start_date = peak_days_range['ds'].min().date()
+        end_date = peak_days_range['ds'].max().date()
+
+        st.write(
+            f"Peak call volume is expected between **{start_date}** and **{end_date}**, "
+            f"with call volumes near the maximum of approximately **{max_volume:.0f} calls** per day."
+        )
+
+
+
+
 
 
 
