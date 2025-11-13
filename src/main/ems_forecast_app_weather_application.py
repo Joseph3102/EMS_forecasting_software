@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from prophet import Prophet
 import matplotlib.pyplot as plt
+import requests
+import numpy as np
 
 st.title("NextCall Analytics")
 
@@ -74,6 +76,7 @@ if uploaded_files:
         cutoff_date = daily_calls['ds'].max()
         future_only = forecast[forecast['ds'] > cutoff_date]
 
+        # Plot 30-day baseline forecast
         plt.figure(figsize=(10, 6))
         plt.plot(future_only['ds'], future_only['yhat'], label='Forecast')
         plt.fill_between(future_only['ds'], future_only['yhat_lower'], future_only['yhat_upper'], alpha=0.3)
@@ -83,6 +86,7 @@ if uploaded_files:
         plt.legend()
         st.pyplot(plt)
 
+        # Trend info
         start = future_only.iloc[0]['yhat']
         end = future_only.iloc[-1]['yhat']
         growth_rate = ((end - start) / start) * 100
@@ -139,40 +143,78 @@ if uploaded_files:
         else:
             st.warning("No facility/location data available for facility-based forecasting.")
 
+        # 6. Weather-adjusted short-term forecast (Houston)
+        st.subheader("5-Day Weather-Adjusted Forecast (Houston)")
 
-    def adjust_call_volume(row):
-        temp_min = row["temperature_2m_min"]
-        rain = row["precipitation_sum"]
-        snow = row["snowfall_sum"]
+        # Get Houston daily weather forecast (Open-Meteo)
+        lat, lon = 29.7604, -95.3698  # Houston
+        url = (
+            f"https://api.open-meteo.com/v1/forecast?"
+            f"latitude={lat}&longitude={lon}"
+            f"&daily=precipitation_sum,snowfall_sum,temperature_2m_min,temperature_2m_max"
+            f"&timezone=America/Chicago"
+        )
 
-        # Any snow = significantly fewer calls
-        if snow > 0:
-            return row["yhat"] * 0.3
-        # Extreme cold (< 2°C / 35°F) = fewer calls
-        elif temp_min < 2:
-            return row["yhat"] * 0.8
-        # Heavy rain (> 10 mm/day)
-        elif rain > 10:
-            return row["yhat"] * 0.7
-        # Light rain (1–10 mm/day)
-        elif rain > 0:
-            return row["yhat"] * 0.9
-        # Normal or hot conditions
+        try:
+            weather_data = requests.get(url).json()
+            weather_df = pd.DataFrame(weather_data["daily"])
+            weather_df["time"] = pd.to_datetime(weather_df["time"])
+            weather_df.rename(columns={"time": "ds"}, inplace=True)
+        except Exception as e:
+            st.error(f"Error fetching weather data: {e}")
+            weather_df = pd.DataFrame(columns=["ds", "temperature_2m_min", "precipitation_sum", "snowfall_sum"])
+
+        # Ensure forecast has ds
+        if "ds" not in forecast.columns:
+            st.error("Forecast data missing 'ds' column. Cannot perform weather-adjusted merge.")
         else:
-            return row["yhat"]
+            five_day_forecast = forecast[["ds", "yhat", "yhat_lower", "yhat_upper"]].tail(5).copy()
 
-        merged["adjusted_yhat"] = merged.apply(adjust_call_volume, axis=1)
+            if "ds" not in weather_df.columns:
+                st.error("Weather data missing 'ds' column. Cannot perform merge.")
+            else:
+                merged = pd.merge(five_day_forecast, weather_df, on="ds", how="left")
 
-    # 5. Plot comparison between normal and weather-adjusted forecasts
-    plt.figure(figsize=(10, 6))
-    plt.plot(merged["ds"], merged["yhat"], label="Baseline Forecast")
-    plt.plot(merged["ds"], merged["adjusted_yhat"], label="Weather-Adjusted Forecast", linestyle="--")
-    plt.title("Next 5 Days - Weather Adjusted EMS Forecast")
-    plt.xlabel("Date")
-    plt.ylabel("Predicted Calls")
-    plt.legend()
-    st.pyplot(plt)
+                # Apply weather adjustment rules
+                def adjust_call_volume(row):
+                    temp_min = row.get("temperature_2m_min", np.nan)
+                    rain = row.get("precipitation_sum", np.nan)
+                    snow = row.get("snowfall_sum", np.nan)
 
-    # 6. Show numeric values in a table
-    st.write(merged[["ds", "yhat", "adjusted_yhat", "temperature_2m_min", "precipitation_sum", "snowfall_sum"]])
+                    if pd.isna(temp_min) or pd.isna(rain) or pd.isna(snow):
+                        return row["yhat"]
 
+                    # Any snow = significantly fewer calls
+                    if snow > 0:
+                        return row["yhat"] * 0.3
+                    # Extreme cold (< 2°C / 35°F)
+                    elif temp_min < 2:
+                        return row["yhat"] * 0.8
+                    # Heavy rain (> 10 mm/day)
+                    elif rain > 10:
+                        return row["yhat"] * 0.7
+                    # Light rain (1–10 mm/day)
+                    elif rain > 0:
+                        return row["yhat"] * 0.9
+                    # Normal or hot
+                    else:
+                        return row["yhat"]
+
+                merged["adjusted_yhat"] = merged.apply(adjust_call_volume, axis=1)
+
+                # Plot comparison between normal and weather-adjusted forecasts
+                plt.figure(figsize=(10, 6))
+                plt.plot(merged["ds"], merged["yhat"], label="Baseline Forecast")
+                plt.plot(merged["ds"], merged["adjusted_yhat"], label="Weather-Adjusted Forecast", linestyle="--")
+                plt.title("Next 5 Days - Weather Adjusted EMS Forecast")
+                plt.xlabel("Date")
+                plt.ylabel("Predicted Calls")
+                plt.legend()
+                st.pyplot(plt)
+
+                # Show numeric values in a table
+                st.write(
+                    merged[
+                        ["ds", "yhat", "adjusted_yhat", "temperature_2m_min", "precipitation_sum", "snowfall_sum"]
+                    ]
+                )
