@@ -13,9 +13,9 @@ SAVE_DIR = "wastewater_cache"
 os.makedirs(SAVE_DIR, exist_ok=True)
 
 # CDC Wastewater data URL (replace with real link once you decide)
-DATA_URL1 = "https://www.cdc.gov/nwss/rv/InfluenzaA-statetrend.html?stateval=Texas"
-DATA_URL2 = "https://www.cdc.gov/nwss/rv/COVID19-statetrend.html?stateval=Texas"
-DATA_URL3 = "https://www.cdc.gov/nwss/rv/RSV-statetrend.html?stateval=Texas"
+DATA_URL1 = "https://www.cdc.gov/wcms/vizdata/NCEZID_DIDRI/FluA/nwssfluastateactivitylevelDL.csv"
+DATA_URL2 = "https://www.cdc.gov/wcms/vizdata/NCEZID_DIDRI/SC2/nwsssc2stateactivitylevelDL.csv"
+DATA_URL3 = "https://www.cdc.gov/wcms/vizdata/NCEZID_DIDRI/rsv/nwssrsvstateactivitylevel.csv"
 
 
 
