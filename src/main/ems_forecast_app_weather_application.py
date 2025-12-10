@@ -61,15 +61,24 @@ if auth_status:
 
     # 1. Allow multiple file uploads
     uploaded_files = st.file_uploader(
-        "Upload one or more CSVs with date/time of EMS calls", type='csv', accept_multiple_files=True
-    )
+    "Upload one or more CSV or Excel files", 
+    type=['csv', 'xlsx'],
+    accept_multiple_files=True
+)
+
 
     # We will store all the dataframes in a list
     all_dfs = []
 
     if uploaded_files:
         for uploaded_file in uploaded_files:
-            df = pd.read_csv(uploaded_file)
+            # If file ends with .xlsx, read Excel 
+            if uploaded_file.name.lower().endswith('.xlsx') or uploaded_file.name.lower().endswith('.xls'):
+                df = pd.read_excel(uploaded_file)
+            else:
+                df = pd.read_csv(uploaded_file)
+
+
 
             # Try to automatically detect a date/time column
             possible_names = ['call_time', 'timestamp', 'date', 'datetime', 'time', 'activation date']
