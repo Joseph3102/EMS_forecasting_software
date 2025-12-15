@@ -5,8 +5,24 @@ import matplotlib.pyplot as plt
 import requests
 import numpy as np
 import streamlit_authenticator as stauth
+import hashlib
+import os
 
 
+
+
+if "historical_df" not in st.session_state:
+    st.session_state["historical_df"] = pd.DataFrame(columns=["call_time", "facility"])
+
+if "uploaded_hashes" not in st.session_state:
+    st.session_state["uploaded_hashes"] = set()
+
+
+def get_file_hash(file):
+    file.seek(0)
+    content = file.read()
+    file.seek(0)
+    return hashlib.md5(content).hexdigest()
 
 
 names = ["Joseph", "Admin"]
@@ -54,10 +70,35 @@ if auth_status:
     authenticator.logout("Logout", "sidebar")
     st.sidebar.write(f"{name}")
 
+    safe_username = str(username)
+    user_file = f"historical_calls_{safe_username}.parquet"
 
+    # Load saved historical data if it exists
+    if os.path.exists(user_file):
+        st.session_state["historical_df"] = pd.read_parquet(user_file)
+    else:
+        st.session_state["historical_df"] = pd.DataFrame(columns=["call_time", "facility"])
 
 
     st.title("NextCall Analytics")
+
+st.header("Historical Call Volume Dashboard")
+
+hist_df = st.session_state["historical_df"]
+
+if hist_df.empty:
+    st.info("No historical data available.")
+else:
+    daily = hist_df.groupby(hist_df["call_time"].dt.date).size().reset_index(name="calls")
+    daily.rename(columns={daily.columns[0]: "date"}, inplace=True)
+
+    st.subheader("Daily Call Volume (Historical)")
+    st.line_chart(daily.set_index("date"))
+
+    st.subheader("Raw Historical Data")
+    st.dataframe(hist_df)
+
+
 
     # 1. Allow multiple file uploads
     uploaded_files = st.file_uploader(
@@ -72,6 +113,13 @@ if auth_status:
 
     if uploaded_files:
         for uploaded_file in uploaded_files:
+            file_hash = get_file_hash(uploaded_file)
+            if file_hash in st.session_state["uploaded_hashes"]:
+                st.warning(f"{uploaded_file.name} has already been uploaded. Skipping.")
+                continue
+            else:
+                st.session_state["uploaded_hashes"].add(file_hash)
+
             # If file ends with .xlsx, read Excel 
             if uploaded_file.name.lower().endswith('.xlsx') or uploaded_file.name.lower().endswith('.xls'):
                 df = pd.read_excel(uploaded_file)
@@ -112,9 +160,18 @@ if auth_status:
 
             all_dfs.append(df[['call_time', 'facility']])
 
-        if len(all_dfs) == 0:
-            st.warning("No valid data to process after checking uploaded files.")
-        else:
+            clean_df = df[['call_time', 'facility']]
+            combined = pd.concat([st.session_state["historical_df"], clean_df], ignore_index=True)
+            combined.drop_duplicates(subset=["call_time", "facility"], inplace=True)
+            combined.sort_values("call_time", inplace=True)
+            st.session_state["historical_df"] = combined
+
+            st.session_state["historical_df"].to_parquet(user_file)
+
+
+
+      
+
             # 2. Aggregate all uploaded data
             combined_df = pd.concat(all_dfs, ignore_index=True)
 
