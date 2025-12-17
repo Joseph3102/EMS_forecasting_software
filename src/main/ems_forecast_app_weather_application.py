@@ -7,6 +7,8 @@ import numpy as np
 import streamlit_authenticator as stauth
 import hashlib
 import os
+from wastewater_data_retrieval import get_texas_data, DATA_URL2, DATA_URL1, DATA_URL3
+
 
 
 
@@ -336,6 +338,25 @@ else:
                             ["ds", "yhat", "adjusted_yhat", "temperature_2m_min", "precipitation_sum", "snowfall_sum"]
                         ]
                     )
+
+            st.subheader("Houston Wastewater Signals")
+
+            with st.spinner("Downloading latest wastewater data from CDC..."):
+                texas_covid = get_texas_data(DATA_URL2)
+                texas_flu = get_texas_data(DATA_URL1)
+                texas_rsv = get_texas_data(DATA_URL3)
+
+            st.success("Wastewater data updated")
+
+            st.write("COVID-19 Wastewater Data (Houston)")
+            st.dataframe(texas_covid.head())
+
+            st.write("Flu Wastewater Data (Houston)")
+            st.dataframe(texas_flu.head())
+
+            st.write("RSV Wastewater Data (Houston)")
+            st.dataframe(texas_rsv.head())
+                    
 
         
 
