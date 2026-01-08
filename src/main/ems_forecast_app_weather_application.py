@@ -9,6 +9,31 @@ import hashlib
 import os
 from wastewater_data_retrieval import get_texas_data, DATA_URL2, DATA_URL1, DATA_URL3
 
+Category_ranking = {
+    "Very Low": 1,
+    "Low": 2,
+    "Moderate": 3,
+    "High": 4,
+    "Very High": 5
+}
+
+multiplier_map = {
+    1: 0.95,
+    2: 1.00,
+    3: 1.05,
+    4: 1.10,
+    5: 1.20
+}
+
+
+def texas_latest_score(df):
+    df = df.copy()
+    df["Week_Ending_Date"] = pd.to_datetime(df["Week_Ending_Date"])
+    latest_week = df["Week_Ending_Date"].max()
+    latest = df[df["Week_Ending_Date"] == latest_week]
+
+    scores = latest["WVAL_Category"].map(Category_ranking)
+    return round(scores.mean())
 
 
 
@@ -30,9 +55,9 @@ def get_file_hash(file):
 names = ["Joseph", "Admin"]
 usernames = ["joseph", "admin"]
 
-# Passwords should be hashed using bcrypt
+
 passwords = ["$2b$12$dFwPQuX2Oe8n5o4ba2ZydOVyx5WdYcGjgNnwlAaLYQXL/kfG3lESi", "$2b$12$dFwPQuX2Oe8n5o4ba2ZydOVyx5WdYcGjgNnwlAaLYQXL/kfG3lESi"]
-# I will show how to generate these below.
+
 
 credentials = {
     "usernames": {
@@ -186,7 +211,6 @@ else:
             st.subheader("Aggregated Daily EMS Calls")
             st.write(daily_calls)
 
-            # 4. Train Prophet model on all combined data
             model = Prophet()
             model.fit(daily_calls)
 
@@ -196,9 +220,47 @@ else:
             cutoff_date = daily_calls['ds'].max()
             future_only = forecast[forecast['ds'] > cutoff_date]
 
-            # Plot 30-day baseline forecast
+
+
+            st.subheader("Houston Wastewater Signals")
+
+
+
+
+            with st.spinner("Downloading latest wastewater data from CDC..."):
+                texas_covid = get_texas_data(DATA_URL2)
+                texas_flu = get_texas_data(DATA_URL1)
+                texas_rsv = get_texas_data(DATA_URL3)
+
+            with st.spinner("Loading rankings for prediction..."):
+                covid_score = texas_latest_score(texas_covid)
+                flu_score = texas_latest_score(texas_flu)
+                rsv_score = texas_latest_score(texas_rsv)
+
+
+            st.success("Wastewater data updated")
+
+            st.write("COVID-19 Wastewater Data (Houston)")
+            st.dataframe(texas_covid.head())
+
+            st.write("Flu Wastewater Data (Houston)")
+            st.dataframe(texas_flu.head())
+
+            st.write("RSV Wastewater Data (Houston)")
+            st.dataframe(texas_rsv.head())
+
+
+            
+
+
+            combined_score = round((covid_score + flu_score + rsv_score) / 3)
+            multiplier = multiplier_map[combined_score]
+            future_only["adjusted_yhat"] = future_only["yhat"] * multiplier
+
+
+
             plt.figure(figsize=(10, 6))
-            plt.plot(future_only['ds'], future_only['yhat'], label='Forecast')
+            plt.plot(future_only['ds'], future_only['adjusted_yhat'], label='Wastewater-Adjusted Forecast')
             plt.fill_between(future_only['ds'], future_only['yhat_lower'], future_only['yhat_upper'], alpha=0.3)
             plt.title("Forecasted EMS Calls (Next 30 Days)")
             plt.xlabel("Date")
@@ -206,7 +268,7 @@ else:
             plt.legend()
             st.pyplot(plt)
 
-            # Trend info
+
             start = future_only.iloc[0]['yhat']
             end = future_only.iloc[-1]['yhat']
             growth_rate = ((end - start) / start) * 100
@@ -227,7 +289,7 @@ else:
                 f"with call volumes near the maximum of approximately **{max_volume:.0f} calls** per day."
             )
 
-            # 5. Facility-based forecasting if available
+
             if combined_df['facility'].notnull().all():
                 st.subheader("Likelihood of Calls by Facility (Next 30 Days)")
 
@@ -263,11 +325,11 @@ else:
             else:
                 st.warning("No facility/location data available for facility-based forecasting.")
 
-            # 6. Weather-adjusted short-term forecast (Houston)
+  
             st.subheader("5-Day Weather-Adjusted Forecast (Houston)")
 
-            # Get Houston daily weather forecast (Open-Meteo)
-            lat, lon = 29.7604, -95.3698  # Houston
+
+            lat, lon = 29.7604, -95.3698  
             url = (
                 f"https://api.open-meteo.com/v1/forecast?"
                 f"latitude={lat}&longitude={lon}"
@@ -284,7 +346,7 @@ else:
                 st.error(f"Error fetching weather data: {e}")
                 weather_df = pd.DataFrame(columns=["ds", "temperature_2m_min", "precipitation_sum", "snowfall_sum"])
 
-            # Ensure forecast has ds
+
             if "ds" not in forecast.columns:
                 st.error("Forecast data missing 'ds' column. Cannot perform weather-adjusted merge.")
             else:
@@ -295,7 +357,7 @@ else:
                 else:
                     merged = pd.merge(five_day_forecast, weather_df, on="ds", how="left")
 
-                    # Apply weather adjustment rules
+
                     def adjust_call_volume(row):
                         temp_min = row.get("temperature_2m_min", np.nan)
                         rain = row.get("precipitation_sum", np.nan)
@@ -304,7 +366,7 @@ else:
                         if pd.isna(temp_min) or pd.isna(rain) or pd.isna(snow):
                             return row["yhat"]
 
-                        # Any snow = significantly fewer calls
+
                         if snow > 0:
                             return row["yhat"] * 0.3
                         # Extreme cold (< 2°C / 35°F)
@@ -322,7 +384,7 @@ else:
 
                     merged["adjusted_yhat"] = merged.apply(adjust_call_volume, axis=1)
 
-                    # Plot comparison between normal and weather-adjusted forecasts
+
                     plt.figure(figsize=(10, 6))
                     plt.plot(merged["ds"], merged["yhat"], label="Baseline Forecast")
                     plt.plot(merged["ds"], merged["adjusted_yhat"], label="Weather-Adjusted Forecast", linestyle="--")
@@ -332,30 +394,15 @@ else:
                     plt.legend()
                     st.pyplot(plt)
 
-                    # Show numeric values in a table
                     st.write(
                         merged[
                             ["ds", "yhat", "adjusted_yhat", "temperature_2m_min", "precipitation_sum", "snowfall_sum"]
                         ]
                     )
 
-            st.subheader("Houston Wastewater Signals")
+           
 
-            with st.spinner("Downloading latest wastewater data from CDC..."):
-                texas_covid = get_texas_data(DATA_URL2)
-                texas_flu = get_texas_data(DATA_URL1)
-                texas_rsv = get_texas_data(DATA_URL3)
-
-            st.success("Wastewater data updated")
-
-            st.write("COVID-19 Wastewater Data (Houston)")
-            st.dataframe(texas_covid.head())
-
-            st.write("Flu Wastewater Data (Houston)")
-            st.dataframe(texas_flu.head())
-
-            st.write("RSV Wastewater Data (Houston)")
-            st.dataframe(texas_rsv.head())
+            
                     
 
         
